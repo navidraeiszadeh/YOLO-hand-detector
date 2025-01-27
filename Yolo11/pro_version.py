@@ -57,7 +57,7 @@ while round_count < N and detection_active:
             print("Failed to grab frame.")
             break  
 
-        time.sleep(time_threshold)
+        # time.sleep(time_threshold)
 
         results = model(frame)
         result = results[0]
