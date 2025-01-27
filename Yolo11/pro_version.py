@@ -25,7 +25,7 @@ def determine_winner(choice1, choice2):
         return "Left Hand Wins"
     return "Right Hand Wins"
 
-# Get N (number of rounds) from the user
+# Get N (number of rounds) from the user (ensure it's odd)
 while True:
     try:
         N = int(input("Enter an odd number of rounds (e.g., 3, 5, 7): "))
@@ -43,8 +43,9 @@ left_hand_wins = 0
 right_hand_wins = 0
 round_count = 0
 detection_active = True  # Flag to control game loop
+winner_text = ""  # To store the winner result text for display
 
-while round_count < N and detection_active:
+while round_count < N:
     hand1_results = []
     hand2_results = []
     start_time = time.time()
@@ -93,15 +94,26 @@ while round_count < N and detection_active:
                 print(f"Left Hand: {left_final}, Right Hand: {right_final}")
                 round_winner = determine_winner(left_final, right_final)
 
-                if round_winner == "Left Hand Wins":
-                    left_hand_wins += 1
-                elif round_winner == "Right Hand Wins":
-                    right_hand_wins += 1
+                # If both hands have the same result, add 2 more rounds to N
+                if round_winner == "Draw":
+                    print("Draw detected! Adding 2 extra rounds.")
+                    N += 2
+                    winner_text = "Draw - Extra Rounds Added"
+                else:
+                    if round_winner == "Left Hand Wins":
+                        left_hand_wins += 1
+                    elif round_winner == "Right Hand Wins":
+                        right_hand_wins += 1
+                    
+                    winner_text = round_winner
 
                 print(f"Round Winner: {round_winner}")
-
                 round_count += 1
                 break  # Move to the next round
+
+        # Show the webcam feed with winner text
+        if winner_text:
+            cv2.putText(frame, winner_text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
         cv2.imshow('YOLO Inference', frame)
 
@@ -115,10 +127,25 @@ print(f"Final Score - Left Hand: {left_hand_wins}, Right Hand: {right_hand_wins}
 
 if left_hand_wins > right_hand_wins:
     print("Overall Winner: Left Hand")
+    winner_text = "Overall Winner: Left Hand"
 elif right_hand_wins > left_hand_wins:
     print("Overall Winner: Right Hand")
+    winner_text = "Overall Winner: Right Hand"
 else:
     print("It's a Draw!")
+    winner_text = "Overall Draw"
+
+# Keep the webcam open to show final result
+while True:
+    ret, frame = cap.read()
+    if not ret:
+        break
+
+    cv2.putText(frame, winner_text, (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+    cv2.imshow('YOLO Inference', frame)
+
+    if cv2.waitKey(1) == 27:  # Press 'ESC' to exit
+        break
 
 cap.release()
 cv2.destroyAllWindows()
