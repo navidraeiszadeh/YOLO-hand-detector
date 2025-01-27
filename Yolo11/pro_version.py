@@ -20,7 +20,7 @@ hand1_results = []
 hand2_results = []
 hold_time = 3  # Time in seconds to collect data
 time_threshold = 0.5  # Process images every 0.5 seconds
-cheat_threshold = 50  # Position change threshold
+detection_active = True  # Flag to control detection loop
 
 start_time = time.time()
 
@@ -34,14 +34,14 @@ def determine_winner(choice1, choice2):
         return "Hand 1 Wins"
     return "Hand 2 Wins"
 
-while True:
+while detection_active:
     ret, frame = cap.read()
     if not ret:
         print("Failed to grab frame.")
         break  
 
     # Process the image at a fixed interval
-    # time.sleep(time_threshold)
+    time.sleep(time_threshold)
 
     results = model(frame)
     result = results[0]
@@ -83,10 +83,8 @@ while True:
             winner = determine_winner(hand1_final, hand2_final)
             print(f"Result: {winner}")
 
-        # Reset lists and timer
-        hand1_results.clear()
-        hand2_results.clear()
-        start_time = time.time()
+            # Stop scanning for new objects
+            detection_active = False  
 
     cv2.imshow('YOLO Inference', frame)
 
