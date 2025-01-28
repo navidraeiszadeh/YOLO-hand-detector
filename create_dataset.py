@@ -88,7 +88,7 @@ class CamDataset:
 
 
 if __name__ == "__main__":
-    CLASS_NAME = "Scissors"
+    CLASS_NAME = "Scissors"  #save scissors image & Rock images & Paper images for all dataset
     IMAGE_SIZE = (512, 512)
 
     if not os.path.isdir('images'):
