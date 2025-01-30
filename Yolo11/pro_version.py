@@ -18,7 +18,7 @@ class_labels = {
 # Parameters
 time_threshold = 0.5  # Process images every 0.5 seconds
 hold_time = 2  # Round duration in seconds
-cheat_threshold = 0.7  # 10% movement threshold for cheat detection
+cheat_threshold = 0.75  # 75% movement threshold for cheat detection
 
 # Track scores and rounds
 left_hand_wins = 0
@@ -134,7 +134,7 @@ while round_count < N:
         timer_text = f"⏳ {remaining_time}s - Round {round_count + 1}/{N}"
         cv2.putText(frame, timer_text, (50, 80), cv2.FONT_HERSHEY_DUPLEX, 1.5, (0, 0, 255), 3)
 
-        ### ✅ **Determine Winner Only If Hands Are Detected**
+        ### ✅ **Determine Winner**
         if remaining_time == 0 and not cheat_detected and hand1_results and hand2_results:
             left_final = class_labels[Counter(hand1_results).most_common(1)[0][0]]
             right_final = class_labels[Counter(hand2_results).most_common(1)[0][0]]
@@ -142,12 +142,23 @@ while round_count < N:
             print(f"Left Hand: {left_final}, Right Hand: {right_final}")
             round_winner = determine_winner(left_final, right_final)
             winner_text = round_winner
+
+            # ✅ **Show a Green Checkmark for Winner**
             if round_winner == "Left Hand Wins":
                 left_hand_wins += 1
+                x1, y1, x2, y2 = map(int, left_box)
             elif round_winner == "Right Hand Wins":
                 right_hand_wins += 1
+                x1, y1, x2, y2 = map(int, right_box)
+
+            # Draw checkmark near the winner
+            cv2.putText(frame, "✅", (x1, y1 - 50), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 0), 8)
 
             round_count += 1
+
+            # **Delay for 2 seconds before starting the next round**
+            cv2.imshow('YOLO Inference', frame)
+            cv2.waitKey(2000)
             break
 
         cv2.putText(frame, winner_text, (100, 150), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 0, 255), 4)
