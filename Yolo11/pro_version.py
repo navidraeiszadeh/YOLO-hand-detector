@@ -17,46 +17,41 @@ class_labels = {
 
 # Parameters
 time_threshold = 0.5  # Process images every 0.5 seconds
-hold_time = 2  # Round duration in seconds
-cheat_threshold = 0.75  # 75% movement threshold for cheat detection
+hold_time = 2  # Time in seconds to process hand detection
+cheat_threshold = 0.65  # 10% movement threshold for cheat detection
 
-# Track scores and rounds
-left_hand_wins = 0
-right_hand_wins = 0
-round_count = 0
-
-# Get N (number of rounds) from the user
+# Get N (number of rounds to win) from the user
 while True:
     try:
-        N = int(input("Enter an odd number of rounds (e.g., 3, 5, 7): "))
-        if N % 2 == 1 and N > 0:
+        N = int(input("Enter the number of wins required (e.g., 3, 5, 7): "))
+        if N > 0:
             break
         else:
-            print("Please enter a valid odd number greater than 0.")
+            print("Please enter a valid number greater than 0.")
     except ValueError:
-        print("Invalid input. Please enter an odd number.")
+        print("Invalid input. Please enter a number.")
 
+# Winner Tracking
+left_hand_wins = 0
+right_hand_wins = 0
+round_count = 1  # Start from round 1
+
+# Function to determine the winner
 def determine_winner(choice1, choice2):
-    """Determine the winner based on game rules."""
     if choice1 == choice2:
-        return "Draw"
+        return "DRAW"
     if (choice1 == "Rock" and choice2 == "Scissors") or \
        (choice1 == "Paper" and choice2 == "Rock") or \
        (choice1 == "Scissors" and choice2 == "Paper"):
-        return "Left Hand Wins"
-    return "Right Hand Wins"
+        return "LEFT WINS"
+    return "RIGHT WINS"
 
-# Tracking previous positions to detect cheating
-prev_left_box = None
-prev_right_box = None
-winner_text = ""
-
-while round_count < N:
+while left_hand_wins < N and right_hand_wins < N:
     hand1_results = []
     hand2_results = []
     cheat_detected = False
 
-    ### 🎯 **Pre-round countdown timer (UX improvement)**
+    ### 🎯 **Pre-round 3-second countdown**
     for countdown in range(3, 0, -1):
         ret, frame = cap.read()
         if not ret:
@@ -68,20 +63,20 @@ while round_count < N:
         cv2.setWindowProperty('YOLO Inference', cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
 
         # Display the countdown timer
-        timer_text = f"Round {round_count + 1} starts in {countdown}..."
+        timer_text = f"Round {round_count} starts in {countdown}..."
         cv2.putText(frame, timer_text, (200, 300), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 255), 4)
         cv2.imshow('YOLO Inference', frame)
 
-        if cv2.waitKey(1000) == 27:  # 1000ms = 1 second
+        if cv2.waitKey(1000) == 27:  # Wait for 1 second
             cap.release()
             cv2.destroyAllWindows()
             exit()
 
-    ### 🚀 **Start Round and Detect Hands**
-    print(f"Starting Round {round_count + 1}/{N}")
+    ### 🚀 **Start Detecting Hands for `hold_time` (2 sec)**
+    print(f"🔍 Detecting hands for Round {round_count}...")
     start_time = time.time()
 
-    while True:
+    while time.time() - start_time < hold_time:
         ret, frame = cap.read()
         if not ret:
             print("Failed to grab frame.")
@@ -95,11 +90,7 @@ while round_count < N:
         class_ids = result.boxes.cls
 
         if len(boxes) >= 2:
-            # Sort boxes based on the x-coordinate to differentiate left and right hands
             sorted_indices = np.argsort([box[0] for box in boxes])
-            left_box = boxes[sorted_indices[0]]
-            right_box = boxes[sorted_indices[1]]
-
             left_hand_class = int(class_ids[sorted_indices[0]])
             right_hand_class = int(class_ids[sorted_indices[1]])
 
@@ -107,61 +98,14 @@ while round_count < N:
             hand2_results.append(right_hand_class)
 
             # Draw bounding boxes and labels
-            for idx, box in enumerate([left_box, right_box]):
+            for idx, box in enumerate([boxes[sorted_indices[0]], boxes[sorted_indices[1]]]):
                 x1, y1, x2, y2 = map(int, box)
                 label = f"{class_labels[int(class_ids[sorted_indices[idx]])]}"
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 3)
                 cv2.putText(frame, label, (x1, y1 - 20), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
 
-            ### ⚠️ **Cheat detection logic (after initial detection)**
-            if prev_left_box is not None and prev_right_box is not None:
-                left_movement = np.linalg.norm(np.array(left_box) - np.array(prev_left_box))
-                right_movement = np.linalg.norm(np.array(right_box) - np.array(prev_right_box))
-
-                box_width = abs(left_box[2] - left_box[0])
-                if left_movement > cheat_threshold * box_width or right_movement > cheat_threshold * box_width:
-                    cheat_detected = True
-                    winner_text = "❌ Cheating Detected!"
-                    print("❌ Cheating Detected!")
-
-            # Save current positions for next iteration
-            prev_left_box = left_box
-            prev_right_box = right_box
-
-        # 🎯 **Timer Display (UX improvement)**
-        elapsed_time = int(time.time() - start_time)
-        remaining_time = max(0, hold_time - elapsed_time)
-        timer_text = f"⏳ {remaining_time}s - Round {round_count + 1}/{N}"
-        cv2.putText(frame, timer_text, (50, 80), cv2.FONT_HERSHEY_DUPLEX, 1.5, (0, 0, 255), 3)
-
-        ### ✅ **Determine Winner**
-        if remaining_time == 0 and not cheat_detected and hand1_results and hand2_results:
-            left_final = class_labels[Counter(hand1_results).most_common(1)[0][0]]
-            right_final = class_labels[Counter(hand2_results).most_common(1)[0][0]]
-
-            print(f"Left Hand: {left_final}, Right Hand: {right_final}")
-            round_winner = determine_winner(left_final, right_final)
-            winner_text = round_winner
-
-            # ✅ **Show a Green Checkmark for Winner**
-            if round_winner == "Left Hand Wins":
-                left_hand_wins += 1
-                x1, y1, x2, y2 = map(int, left_box)
-            elif round_winner == "Right Hand Wins":
-                right_hand_wins += 1
-                x1, y1, x2, y2 = map(int, right_box)
-
-            # Draw checkmark near the winner
-            cv2.putText(frame, "✅", (x1, y1 - 50), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 0), 8)
-
-            round_count += 1
-
-            # **Delay for 2 seconds before starting the next round**
-            cv2.imshow('YOLO Inference', frame)
-            cv2.waitKey(2000)
-            break
-
-        cv2.putText(frame, winner_text, (100, 150), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 0, 255), 4)
+        # Show processing UI
+        cv2.putText(frame, f"Processing...", (50, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 255, 0), 3)
         cv2.imshow('YOLO Inference', frame)
 
         if cv2.waitKey(1) == 27:
@@ -169,10 +113,48 @@ while round_count < N:
             cv2.destroyAllWindows()
             exit()
 
-### **Final Winner Announcement**
+    ### ✅ **Determine Most Frequent Result**
+    if hand1_results and hand2_results:
+        left_final = class_labels[Counter(hand1_results).most_common(1)[0][0]]
+        right_final = class_labels[Counter(hand2_results).most_common(1)[0][0]]
+
+        print(f"Left Hand: {left_final}, Right Hand: {right_final}")
+        round_winner = determine_winner(left_final, right_final)
+
+        ### 🎉 **Display the Winner with a Green Checkmark**
+        if round_winner == "LEFT WINS":
+            left_hand_wins += 1
+            winner_text = "✅ LEFT WINS!"
+            x1, y1, x2, y2 = map(int, boxes[sorted_indices[0]])
+        elif round_winner == "RIGHT WINS":
+            right_hand_wins += 1
+            winner_text = "✅ RIGHT WINS!"
+            x1, y1, x2, y2 = map(int, boxes[sorted_indices[1]])
+        else:
+            winner_text = "🤝 DRAW!"
+
+        # Display the result
+        cv2.putText(frame, winner_text, (100, 150), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 0, 255), 4)
+
+        # Draw a green checkmark near the winner
+        if round_winner != "DRAW":
+            cv2.putText(frame, "✅", (x1, y1 - 50), cv2.FONT_HERSHEY_SIMPLEX, 3, (0, 255, 0), 8)
+
+        cv2.imshow('YOLO Inference', frame)
+        cv2.waitKey(2000)  # **Pause for 2 seconds before starting the next round**
+    
+    else:
+        print("No hands detected! Skipping this round.")
+        winner_text = "⚠️ No hands detected!"
+
+    # Move to the next round
+    round_count += 1
+
+### 🎉 **Final Winner Announcement**
 print("\n🎉 Game Over!")
-print(f"🏆 Final Score - Left Hand: {left_hand_wins}, Right Hand: {right_hand_wins}")
-final_winner = "🎉 Left Hand Wins!" if left_hand_wins > right_hand_wins else "🎉 Right Hand Wins!"
+print(f"🏆 Final Score - Left: {left_hand_wins}, Right: {right_hand_wins}")
+
+final_winner = "🎉 LEFT WINS THE GAME!" if left_hand_wins == N else "🎉 RIGHT WINS THE GAME!"
 cv2.putText(frame, final_winner, (100, 150), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 255), 4)
 cv2.imshow('YOLO Inference', frame)
 cv2.waitKey(5000)
