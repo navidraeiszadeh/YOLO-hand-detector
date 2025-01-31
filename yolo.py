@@ -70,7 +70,6 @@ class YOLO:
 
     def preprocess(self, image):
         IMG_SIZE = (300, 300)
-        print ("sasasasasasasasas")
         if image.size == 0:
             return None  # Handle empty crops safely
 
