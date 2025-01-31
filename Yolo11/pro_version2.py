@@ -21,7 +21,7 @@ webcam_width = int(screen_width * 0.8)
 ribbon_width = int(screen_width * 0.2)
 
 # Game parameters
-CHEAT_THRESHOLD = 150   # Minimum vertical movement (pixels)
+CHEAT_THRESHOLD = 0.03 # Minimum vertical movement (pixels)
 PRE_ROUND_TIME = 3    # Time to show initial hands
 HOLD_TIME = 2         # Time to capture final gesture
 WIN_REQUIRED = 3      # Number of wins needed to win match
@@ -66,12 +66,25 @@ def detect_hands(frame):
         return sorted_hands[0], sorted_hands[1]
     return None, None
 
-def validate_pre_round(left_hand, right_hand):
+def validate_pre_round(left_hand, right_hand, prev_left_y, prev_right_y):
     l_box, l_cls = left_hand
     r_box, r_cls = right_hand
-    return (l_cls == 1 and r_cls == 1 and 
-            abs(l_box[3] - l_box[1]) > CHEAT_THRESHOLD and 
-            abs(r_box[3] - r_box[1]) > CHEAT_THRESHOLD)
+    
+    # Check if both hands are showing Rock
+    if l_cls != 1 or r_cls != 1:
+        return False
+    
+    # Calculate box heights
+    left_height = l_box[3] - l_box[1]
+    right_height = r_box[3] - r_box[1]
+    
+    # Calculate movement percentages
+    if prev_left_y is not None and prev_right_y is not None:
+        left_move = abs(l_box[1] - prev_left_y) / left_height
+        right_move = abs(r_box[1] - prev_right_y) / right_height
+        return left_move > CHEAT_THRESHOLD and right_move > CHEAT_THRESHOLD
+    
+    return True  # First frame check
 
 # Modify the draw_accurate_boxes function and its calls like this:
 
@@ -152,56 +165,93 @@ while game_active:
         cv2.waitKey(1)
     
     # Pre-round validation with movement timer
+# Initialize variables for tracking movement during pre-round validation
     validation_start = time.time()
-    valid_frames = 0
+    left_movements = []
+    right_movements = []
     total_frames = 0
+    prev_left_y = None
+    prev_right_y = None
     
+
     while time.time() - validation_start < PRE_ROUND_TIME:
         ret, frame = cap.read()
         if not ret:
             continue
-            
+
         game_screen = create_game_screen(frame)
         left_hand, right_hand = detect_hands(frame)
-        
-        # Draw accurate bounding boxes
-        draw_accurate_boxes(game_screen, left_hand, right_hand , width_scale, height_scale)
-        
-        # Movement timer display
-        elapsed = time.time() - validation_start
-        remaining = PRE_ROUND_TIME - elapsed
-        cv2.putText(game_screen, f"Move your rocks! {remaining:.1f}s", 
-                   (ribbon_width + 100, 50), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 255), 2)
-        
+
+        # Calculate scaling factors
+        original_height, original_width = frame.shape[:2]
+        width_scale = webcam_width / original_width
+        height_scale = screen_height / original_height
+
+        # Draw bounding boxes
+        draw_accurate_boxes(game_screen, left_hand, right_hand, width_scale, height_scale)
+
+        # Movement tracking
         if left_hand and right_hand:
-            total_frames += 1
-            if validate_pre_round(left_hand, right_hand):
-                valid_frames += 1
-        
+            l_box, _ = left_hand
+            r_box, _ = right_hand
+            current_left_y = l_box[1]
+            current_right_y = r_box[1]
+
+            if prev_left_y is not None and prev_right_y is not None:
+                left_height = l_box[3] - l_box[1]
+                right_height = r_box[3] - r_box[1]
+
+                left_move = abs(current_left_y - prev_left_y) / left_height
+                right_move = abs(current_right_y - prev_right_y) / right_height
+
+                # Store movement percentages
+                left_movements.append(left_move)
+                right_movements.append(right_move)
+                total_frames += 1
+
+            # Update previous positions
+            prev_left_y = current_left_y
+            prev_right_y = current_right_y
+
+        # Timer display
+        remaining = PRE_ROUND_TIME - (time.time() - validation_start)
+        cv2.putText(game_screen, f"Move rocks! {remaining:.1f}s",
+                    (ribbon_width + 50, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 255), 2)
+
         cv2.imshow('Rock Paper Scissors', game_screen)
         if cv2.waitKey(1) == 27:
             game_active = False
             break
-    
-    # Check validation results with zero division protection
-    if total_frames == 0:
-        print("No hands detected during validation phase!")
-        cv2.putText(game_screen, "NO HANDS DETECTED!", (webcam_width//2-200, screen_height//2), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 3)
+
+    # Calculate average movement percentage
+    if total_frames > 0:
+        avg_left_move = sum(left_movements) / total_frames
+        avg_right_move = sum(right_movements) / total_frames
+    else:
+        avg_left_move = avg_right_move = 0  # No hands detected
+
+    print(f"Avg Left Move: {avg_left_move:.2%}, Avg Right Move: {avg_right_move:.2%}")
+
+    # **Detect Cheating Based on Average Movement**
+    if avg_left_move < CHEAT_THRESHOLD or avg_right_move < CHEAT_THRESHOLD:
+        print("INVALID START! Average movement was too low.")
+        cv2.putText(game_screen, "INVALID START!", (webcam_width//2-200, screen_height//2),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 3)
         cv2.imshow('Rock Paper Scissors', game_screen)
         cv2.waitKey(1000)
-        continue
+        continue  # Restart the pre-round phase
+
         
-    validation_ratio = valid_frames / total_frames
-    print(f"Validation success rate: {validation_ratio:.2%}")
+    # validation_ratio = valid_frames / total_frames
+    # print(f"Validation success rate: {validation_ratio:.2%}")
         
-    if validation_ratio < 0.7:
-        cv2.putText(game_screen, "INVALID START!", (webcam_width//2-200, screen_height//2), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 3)
-        cv2.imshow('Rock Paper Scissors', game_screen)
-        cv2.waitKey(1000)
-        continue
+    # if validation_ratio < 0.7:
+    #     cv2.putText(game_screen, "INVALID START!", (webcam_width//2-200, screen_height//2), 
+    #                cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 3)
+    #     cv2.imshow('Rock Paper Scissors', game_screen)
+    #     cv2.waitKey(1000)
+    #     continue
     
     # Capture final gestures
     gesture_start = time.time()
