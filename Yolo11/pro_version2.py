@@ -208,6 +208,13 @@ while game_active:
                 left_movements.append(left_move)
                 right_movements.append(right_move)
                 total_frames += 1
+                
+                cv2.putText(game_screen, f"L Move: {left_move:.2%}",
+                                (ribbon_width + 50, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                                (0, 255, 0) if left_move >= CHEAT_THRESHOLD else (0, 0, 255), 2)
+                cv2.putText(game_screen, f"R Move: {right_move:.2%}",
+                                (ribbon_width + 50, 150), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                                (0, 255, 0) if right_move >= CHEAT_THRESHOLD else (0, 0, 255), 2)
 
             # Update previous positions
             prev_left_y = current_left_y
@@ -232,10 +239,18 @@ while game_active:
         avg_left_move = avg_right_move = 0  # No hands detected
 
     print(f"Avg Left Move: {avg_left_move:.2%}, Avg Right Move: {avg_right_move:.2%}")
+    
 
     # **Detect Cheating Based on Average Movement**
     if avg_left_move < CHEAT_THRESHOLD or avg_right_move < CHEAT_THRESHOLD:
         print("INVALID START! Average movement was too low.")
+        if (avg_left_move < CHEAT_THRESHOLD and avg_right_move >= CHEAT_THRESHOLD):
+            print("Left player cheated! Score reduced.")
+            score["Left"] = max(0, score["Left"] - 1)
+        elif (avg_left_move >= CHEAT_THRESHOLD and avg_right_move < CHEAT_THRESHOLD):
+            print("Right player cheated! Score reduced.")
+            score["Right"] = max(0, score["Right"] - 1)    
+         
         cv2.putText(game_screen, "INVALID START!", (webcam_width//2-200, screen_height//2),
                     cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 0, 255), 3)
         cv2.imshow('Rock Paper Scissors', game_screen)
